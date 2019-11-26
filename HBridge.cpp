@@ -3,7 +3,7 @@
 
 void power(float p, int pinForward, int pinReverse, int maxPWM) {
   p = max(-1, min(1, p));
-  int pwm = (int)(p * 255.0 + 0.5);
+  int pwm = (int)(p * maxPWM + 0.5f);
   if(pwm >= 0) {
     analogWrite(pinForward, min(maxPWM, pwm));
     analogWrite(pinReverse, 0);
