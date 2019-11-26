@@ -1,19 +1,24 @@
+
 #include "DigitalButton.h"
 #include "HBridge.h"
 #include "MPU6050.h"
 #include "Led.h"
 
+
 #define USE_SERIAL
 #define BAUD_RATE 9600
 
+#define USE_DEBUG_BUTTONS
+#define BUTTON1_PIN 7
+#define BUTTON2_PIN 8
+#define BUTTON3_PIN 9
 
+
+//HBridge pins
 #define LEFT_MOTOR_PIN 5
 #define RIGHT_MOTOR_PIN 6
 #define LEFT_MOTOR_INV_PIN 11
 #define RIGHT_MOTOR_INV_PIN 10
-#define BUTTON1_PIN 7
-#define BUTTON2_PIN 8
-#define BUTTON3_PIN 9
 
 
 //States
@@ -26,6 +31,8 @@
 #define ROTATING360 6
 #define SHUTDOWN_MOTORS 7
 #define ROTATING360_FINALIZING 6
+
+
 #define FORWADING_TIME 4000
 #define PDI_PROPORTIONAL_FACTOR 0.002f //Higher means more aggresive correction
 
@@ -35,7 +42,9 @@
 
 float fullRotationX = 11385;
 
+#ifdef USE_DEBUG_BUTTONS
 Button *btn1, *btn2, *btn3;
+#endif
 HBridge *motors;
 MPU6050* mpu6050;
 Led* debugLed;
@@ -46,21 +55,24 @@ float target_angle = 0;
 
 
 void setup(){
-  #ifdef USE_SERIAL
+#ifdef USE_SERIAL
   Serial.begin(BAUD_RATE);
   Serial.println("Ready!");
-  #endif
+#endif
+
   debugLed = new Led(13);
   debugLed->pulse(0.5);
   
   motors = new HBridge(LEFT_MOTOR_PIN, LEFT_MOTOR_INV_PIN, RIGHT_MOTOR_PIN, RIGHT_MOTOR_INV_PIN);
-  
+
+#ifdef USE_DEBUG_BUTTONS
   btn1 = new DigitalButton(BUTTON1_PIN);
   btn1->addHandler(&btn1_handler);
   btn2 = new DigitalButton(BUTTON2_PIN);
   btn2->addHandler(&btn2_handler);
   btn3 = new DigitalButton(BUTTON3_PIN);
   btn3->addHandler(&btn3_handler);
+#endif
   
   mpu6050 = new MPU6050();
   mpu6050->autocalibration(true);
@@ -68,7 +80,9 @@ void setup(){
 
 void loop() {
   debugLed->update();
+#ifdef USE_DEBUG_BUTTONS
   checkButtons();
+#endif
   mpu6050->update();
   handleCommands();
   updateStateMachine();
@@ -144,6 +158,8 @@ void handleCommands() {
   }
   #endif
 }
+
+#ifdef USE_DEBUG_BUTTONS
 void checkButtons() {
   btn1->check();
   btn2->check();
@@ -168,3 +184,4 @@ void btn3_handler(ButtonState s) {
     state = ROTATE360;
   }
 }
+#endif

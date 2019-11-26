@@ -58,7 +58,7 @@ void MPU6050::computeAngles() {
     } else {
       if(this->avgCountGyX >= 2000 && abs(this->getAvgGyX()) > 0.1) {
         this->recalibrate(1.0f);
-        Serial.println("Autocalibration...");
+        //Serial.println("Autocalibration...");
       }
     }
   }
