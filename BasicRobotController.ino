@@ -30,7 +30,6 @@
 #define SHUTDOWN_MOTORS 20
 
 
-#define FORWADING_TIME 4000
 #define PDI_PROPORTIONAL_FACTOR 0.002f //Higher means more aggresive correction
 
 
@@ -53,6 +52,8 @@ float forward_direction = 1; //1 = forward, -1 = backward
 float rotate_target_angle = 0;
 float rotate_direction = 1;
 long rotating_ok_micros = -1;
+char lastCmd = '?';
+long forwarding_time = 4 * 1000000;
 void setup(){
 #ifdef USE_SERIAL
   Serial.begin(BAUD_RATE);
@@ -107,12 +108,11 @@ void updateStateMachine() {
     break;
     case FORWARD:
       forwarding_start = millis();
-      forward_target_angle = 0;
       state = FORWARDING;
     break;
-    case FORWARDING:
+    case FORWARDING: 
      debugLed->pulse(10);
-     if((millis() - forwarding_start) < FORWADING_TIME) {
+     if((millis() - forwarding_start) < forwarding_time) {
        float x = (mpu6050->angleX + (forward_target_angle * fullRotationX / 360)) * PDI_PROPORTIONAL_FACTOR;
        motors->leftPower(forward_direction + x);
        motors->rightPower(forward_direction - x);
@@ -121,7 +121,6 @@ void updateStateMachine() {
      }
     break;
     case ROTATE:
-      mpu6050->resetAngles();
       state = ROTATING;
       rotating_ok_micros = -1;
     break;
@@ -144,6 +143,7 @@ void updateStateMachine() {
     
   }
 }
+
 void handleCommands() {
   #ifdef USE_SERIAL
   if(Serial.available() > 0) {
@@ -166,21 +166,37 @@ void handleCommands() {
     } else if(v == 'w') {
       state = FORWARD;
       forward_direction = 1;
+      forward_target_angle = 0;
+      if(lastCmd == 'a' || lastCmd == 'd') {
+         mpu6050->resetAngles();
+      }
+      forwarding_time = 60 * 1000000;
       Serial.println("w");
     } else if(v == 's') {
       state = FORWARD;
       forward_direction = -1;
+      forward_target_angle = 0;
+      if(lastCmd == 'a' || lastCmd == 'd') {
+         mpu6050->resetAngles();
+      }
+      forwarding_time = 60 * 1000000;
       Serial.println("s");
     } else if(v == 'd') {
       state = ROTATE;
       rotate_target_angle = 90;
       rotate_direction = -1;
+      mpu6050->resetAngles();
       Serial.println("d");
     } else if(v == 'a') {
       state = ROTATE;
       rotate_target_angle = 90;
       rotate_direction = 1;
+      mpu6050->resetAngles();
       Serial.println("a");
+    }
+
+    if(v == 'w' || v == 's' || v == 'a' || v == 'd') {
+      lastCmd = v;
     }
   }
   #endif
@@ -209,6 +225,8 @@ void btn2_handler(ButtonState s) {
     mpu6050->resetAngles();
     forward_direction = 1;
     state = FORWARD;
+    forwarding_time = 4 * 1000000;
+    forward_target_angle = 0;
   }
 }
 void btn3_handler(ButtonState s) {
@@ -216,6 +234,7 @@ void btn3_handler(ButtonState s) {
     state = ROTATE;
     rotate_direction = 1;
     rotate_target_angle = 90;
+    mpu6050->resetAngles();
   }
 }
 #endif
