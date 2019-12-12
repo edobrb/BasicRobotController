@@ -46,7 +46,7 @@ void MPU6050::computeAngles() {
   float v1 = lastGyX + offsetGyX;
   float v2 = GyX + offsetGyX;
   if (abs(v2) > MPU6050_THRESHOLD_GY) {
-     angleX += computeArea(v1, v2, dt);
+    angleX += computeArea(v1, v2, dt);
   } else {
     avgSumGyX += v2;
     avgCountGyX++;
@@ -58,7 +58,7 @@ void MPU6050::computeAngles() {
     } else {
       if(this->avgCountGyX >= 2000 && abs(this->getAvgGyX()) > 0.1) {
         this->recalibrate(1.0f);
-        Serial.println("Autocalibration...");
+        Serial.println("Autocalibrated");
       }
     }
   }
