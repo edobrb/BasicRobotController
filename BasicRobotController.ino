@@ -29,8 +29,8 @@
 
 #define AHEAD 1
 #define BACKWARD -1
-#define LEFT -1
-#define RIGHT 1
+#define LEFT 1
+#define RIGHT -1
 
 
 float fullRotationX = 11385;
@@ -78,9 +78,6 @@ void loop() {
   Serial.flush();
   #endif
 }
-float sign1(float v) {
-  return v>0?1:(v<0?-1:0);
-}
 void updateStateMachine() {
   if(state == NONE) { ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -118,12 +115,12 @@ void updateStateMachine() {
     debugLed->pulse(20);
     float factor = rotate_direction * mpu6050->angleX / ((rotate_target_angle / 360.0f) * fullRotationX) - 1;
     float power = max(0.4f, min(1, abs(factor))); //Need to throw a PID control
-    motors->leftPower(rotate_direction * sign1(factor) * power);
-    motors->rightPower(-rotate_direction * sign1(factor) * power);
+    motors->leftPower(rotate_direction * sign(factor) * power);
+    motors->rightPower(-rotate_direction * sign(factor) * power);
     if(abs(factor) < 0.02 && rotating_ok_micros == -1) {
-      rotating_ok_micros = micros();
+      rotating_ok_micros = now();
     }
-    if(rotating_ok_micros != -1 && (micros() - rotating_ok_micros) / 1000000.0 > 0.5) {
+    if(rotating_ok_micros != -1 && isExpired(rotating_ok_micros, seconds(0.5))) {
       state = SHUTDOWN_MOTORS;
     }
     if(abs(factor) > 0.02) {
@@ -140,13 +137,8 @@ void updateStateMachine() {
     if(!isExpired(keep_position_start, keep_position_time)) {
       debugLed->pulse(1);
       float x = (mpu6050->angleX) * PDI_PROPORTIONAL_FACTOR * 2;
-      if(x > 0) {
-        motors->leftPower(x);
-        motors->rightPower(-x);
-      } else {
-        motors->leftPower(x);
-        motors->rightPower(-x);
-      }
+      motors->leftPower(x);
+      motors->rightPower(-x);
     } else {
       state = SHUTDOWN_MOTORS;
     }
@@ -184,10 +176,10 @@ void handleCommands() {
       forward(BACKWARD, 0, seconds(60));
       Serial.println("s");
     } else if(v == 'd') {
-      rotate(LEFT, 90);
+      rotate(RIGHT, 90);
       Serial.println("d");
     } else if(v == 'a') {
-      rotate(RIGHT, 90);
+      rotate(LEFT, 90);
       Serial.println("a");
     }
 

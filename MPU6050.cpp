@@ -1,10 +1,7 @@
 #include<Wire.h>
 #include "arduino.h"
 #include "MPU6050.h"
-
-float sign(float v) {
-  return v>0?1:(v<0?-1:0);
-}
+#include "Utils.h"
 
 float computeArea(float v1, float v2, float dt) {
   float area;
