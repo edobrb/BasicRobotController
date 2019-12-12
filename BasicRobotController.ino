@@ -8,7 +8,7 @@
 #define USE_SERIAL
 #define BAUD_RATE 9600
 
-#define USE_DEBUG_BUTTONS
+//#define USE_DEBUG_BUTTONS
 #define BUTTON1_PIN 7
 #define BUTTON2_PIN 8
 #define BUTTON3_PIN 9
@@ -28,7 +28,8 @@
 #define ROTATE 10
 #define ROTATING 11
 #define SHUTDOWN_MOTORS 20
-
+#define KEEP_POSITION 30
+#define KEEPING_POSITION 31
 
 #define PDI_PROPORTIONAL_FACTOR 0.002f //Higher means more aggresive correction
 
@@ -45,15 +46,15 @@ HBridge *motors;
 MPU6050* mpu6050;
 Led* debugLed;
 
-int state = 0;
-long forwarding_start = 0;
+int state = NONE;
+long forwarding_start = 0, keep_position_start = 0;
 float forward_target_angle = 0;
 float forward_direction = 1; //1 = forward, -1 = backward
 float rotate_target_angle = 0;
 float rotate_direction = 1;
 long rotating_ok_micros = -1;
 char lastCmd = '?';
-long forwarding_time = 4 * 1000000;
+long forwarding_time = 4 * 1000000, keep_position_time = 500000 /*0.5s*/;
 void setup(){
 #ifdef USE_SERIAL
   Serial.begin(BAUD_RATE);
@@ -100,46 +101,72 @@ float sign1(float v) {
   return v>0?1:(v<0?-1:0);
 }
 void updateStateMachine() {
-  switch(state) {
-    case SHUTDOWN_MOTORS:
-      debugLed->pulse(0.5);
-      motors->stop();
-      state = NONE;
-    break;
-    case FORWARD:
-      forwarding_start = millis();
-      state = FORWARDING;
-    break;
-    case FORWARDING: 
-     debugLed->pulse(10);
-     if((millis() - forwarding_start) < forwarding_time) {
-       float x = (mpu6050->angleX + (forward_target_angle * fullRotationX / 360)) * PDI_PROPORTIONAL_FACTOR;
-       motors->leftPower(forward_direction + x);
-       motors->rightPower(forward_direction - x);
-     } else {
-       state = SHUTDOWN_MOTORS;
-     }
-    break;
-    case ROTATE:
-      state = ROTATING;
+  if(state == NONE) {
+
+    
+    
+  } else if(state == SHUTDOWN_MOTORS) {
+
+    debugLed->pulse(0.5);
+    motors->stop();
+    state = NONE;
+    
+  } else if(state == FORWARD) {
+
+    forwarding_start = micros();
+    state = FORWARDING;
+    
+  } else if(state == FORWARDING) {
+    
+    debugLed->pulse(10);
+    if((micros() - forwarding_start) < forwarding_time) {
+      float x = (mpu6050->angleX + (forward_target_angle * fullRotationX / 360)) * PDI_PROPORTIONAL_FACTOR;
+      motors->leftPower(forward_direction + x);
+      motors->rightPower(forward_direction - x);
+    } else {
+      state = SHUTDOWN_MOTORS;
+    }
+   
+  }  if(state == ROTATE) {
+
+    state = ROTATING;
+    rotating_ok_micros = -1;
+    
+  } else if(state == ROTATING) {
+
+    debugLed->pulse(20);
+    float factor = rotate_direction * mpu6050->angleX / ((rotate_target_angle / 360.0f) * fullRotationX) - 1;
+    float power = max(0.4f, min(1, abs(factor))); //Need to throw a PID control
+    motors->leftPower(rotate_direction * sign1(factor) * power);
+    motors->rightPower(-rotate_direction * sign1(factor) * power);
+    if(abs(factor) < 0.02 && rotating_ok_micros == -1) {
+      rotating_ok_micros = micros();
+    }
+    if(rotating_ok_micros != -1 && (micros() - rotating_ok_micros) / 1000000.0 > 0.5) {
+      state = SHUTDOWN_MOTORS;
+    }
+    if(abs(factor) > 0.02) {
       rotating_ok_micros = -1;
-    break;
-    case ROTATING:
-      debugLed->pulse(20);
-      float factor = rotate_direction * mpu6050->angleX / ((rotate_target_angle / 360.0f) * fullRotationX) - 1;
-      float power = max(0.2f, min(1, abs(factor))); //Need to throw a PID control
-      motors->leftPower(rotate_direction * sign1(factor) * power);
-      motors->rightPower(-rotate_direction * sign1(factor) * power);
-      if(abs(factor) < 0.02 && rotating_ok_micros == -1) {
-        rotating_ok_micros = micros();
+    }
+    
+  } else if(state == KEEP_POSITION) {
+    state = KEEPING_POSITION;
+    keep_position_start = micros(); 
+  } else if(state == KEEPING_POSITION) {
+
+    if((micros() - keep_position_start) < keep_position_time) {
+      debugLed->pulse(1);
+      float x = (mpu6050->angleX) * PDI_PROPORTIONAL_FACTOR * 2;
+      if(x > 0) {
+        motors->leftPower(x);
+        motors->rightPower(-x);
+      } else {
+        motors->leftPower(x);
+        motors->rightPower(-x);
       }
-      if(rotating_ok_micros != -1 && (micros() - rotating_ok_micros) / 1000000.0 > 0.5) {
-        state = SHUTDOWN_MOTORS;
-      }
-      if(abs(factor) > 0.02) {
-        rotating_ok_micros = -1;
-      }
-    break;
+    } else {
+      state = SHUTDOWN_MOTORS;
+    }
     
   }
 }
@@ -161,7 +188,8 @@ void handleCommands() {
 
 
     if(v == 'h') {
-      state = SHUTDOWN_MOTORS;
+      state = KEEP_POSITION;
+      mpu6050->resetAngles();
       Serial.println("h");
     } else if(v == 'w') {
       state = FORWARD;
