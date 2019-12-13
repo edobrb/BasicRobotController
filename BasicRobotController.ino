@@ -65,8 +65,6 @@ void setup(){
 #ifdef USE_SERIAL
   Serial.println("Ready!");
 #endif
-
-forward(AHEAD, 0, seconds(60));
 }
 
 void loop() {
