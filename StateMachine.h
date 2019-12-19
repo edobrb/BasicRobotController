@@ -8,11 +8,14 @@ typedef void(*FunctionPointer)();
 class StateMachine { 
 public:
   StateMachine(int initialState);
-  void transition(int stateId);
+  
   void update();
   void setState(int stateId, FunctionPointer delegate);
-  
+  int getState();
+  void setExernalInputHandler(FunctionPointer delegate);
+  void transition(int stateId);
 private:  
+  FunctionPointer externalInputHandler;
   FunctionPointer delegates[MAX_STATE_ID_VALUE];
   int currentState;
 };

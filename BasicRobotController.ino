@@ -5,7 +5,6 @@
 #include "PID.h"
 #include "StateMachine.h"
 
-#define USE_SERIAL
 #define BAUD_RATE 9600
 
 
@@ -39,7 +38,6 @@ PID* rotatePid;
 PID* forwardPid;
 StateMachine* stateMachine;
 
-int state = NONE;
 long forwarding_start = 0;
 float forward_target_angle = 0;
 float forward_direction = 1; //1 = forward, -1 = backward
@@ -48,70 +46,50 @@ long rotating_start = 0;
 char lastMovementCmd = '?';
 long forwarding_time = seconds(4.0), rotating_time = seconds(2);
 void setup(){
-#ifdef USE_SERIAL
   Serial.begin(BAUD_RATE);
   Serial.println("Initializing...");
-#endif
 
   debugLed = new Led(13);
-  debugLed->pulse(0.5);
   
   motors = new HBridge(LEFT_MOTOR_PIN, LEFT_MOTOR_INV_PIN, RIGHT_MOTOR_PIN, RIGHT_MOTOR_INV_PIN);
   
   mpu6050 = new MPU6050();
   mpu6050->autocalibration(true);
 
-  rotatePid = new PID(50, 100, 2, 1);
+  rotatePid = new PID(20, 100, 2, 1);
   forwardPid = new PID(1, 0.1, 0.1, 2);
 
+  initializeStateMachine();
+  keep_position(seconds(600));
+  
+  
+  Serial.println("Ready!");
+}
+void loop() {
+  debugLed->update();
+  mpu6050->update();
+  stateMachine->update();
+  Serial.flush();
+}
+
+void initializeStateMachine() {
   stateMachine = new StateMachine(DO_NOTHING);
   
   stateMachine->setState(DO_NOTHING, []() -> void { });
+  
   stateMachine->setState(SHUTDOWN_MOTORS, []() -> void { 
     debugLed->pulse(0.5);
     motors->stop();
     stateMachine->transition(DO_NOTHING);
   });
-  stateMachine->setState(SHUTDOWN_MOTORS, []() -> void {  });
-  stateMachine->setState(SHUTDOWN_MOTORS, []() -> void {  });
-  stateMachine->setState(SHUTDOWN_MOTORS, []() -> void {  });
-  stateMachine->setState(SHUTDOWN_MOTORS, []() -> void {  });
-  stateMachine->setState(SHUTDOWN_MOTORS, []() -> void {  });
   
-#ifdef USE_SERIAL
-  Serial.println("Ready!");
-#endif
-  keep_position(seconds(600));
-}
-
-void loop() {
-  debugLed->update();
-  mpu6050->update();
-  handleCommands();
-  updateStateMachine();
-  stateMachine->update();
-  
-  
-  #ifdef USE_SERIAL
-  Serial.flush();
-  #endif
-}
-void updateStateMachine() {
-  if(state == NONE) { ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-  } else if(state == SHUTDOWN_MOTORS) { ///////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    debugLed->pulse(0.5);
-    motors->stop();
-    state = NONE;
-    
-  } else if(state == FORWARD) { ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    state = FORWARDING;
+  stateMachine->setState(FORWARD, []() -> void { 
     forwarding_start = now();
-    forwardPid->reset();
-    
-  } else if(state == FORWARDING) { ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    
+    forwardPid->reset(); 
+    stateMachine->transition(FORWARDING);
+  });
+  
+  stateMachine->setState(FORWARDING, []() -> void {
     debugLed->pulse(10);
     if(!isExpired(forwarding_start, forwarding_time)) {
       float error = (mpu6050->angleX - ((forward_target_angle / 360.0f) * fullRotationX)) / 360.0;
@@ -119,39 +97,38 @@ void updateStateMachine() {
       motors->leftPower(forward_direction - attenuation);
       motors->rightPower(forward_direction + attenuation);
     } else {
-      state = SHUTDOWN_MOTORS;
+      stateMachine->transition(SHUTDOWN_MOTORS);
     }
-   
-  }  if(state == ROTATE) { //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-
-    state = ROTATING;
+  });
+  
+  stateMachine->setState(ROTATE, []() -> void { 
     rotating_start = now();
     rotatePid->reset();
-    
-  } else if(state == ROTATING) { ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    
-    debugLed->pulse(20);
+    stateMachine->transition(ROTATING);
+  });
+  
+  stateMachine->setState(ROTATING, []() -> void { debugLed->pulse(20);
     if(!isExpired(rotating_start, rotating_time)) {
       float error = mpu6050->angleX - ((rotate_target_angle / 360.0f) * fullRotationX);
       float power = rotatePid->update(error/fullRotationX);
       motors->leftPower(-power);
       motors->rightPower(power);
     } else {
-      state = SHUTDOWN_MOTORS;
+      stateMachine->transition(SHUTDOWN_MOTORS);
     }
-    
-  }
+  });
+
+  stateMachine->setExernalInputHandler(handleCommands);
 }
 
 void handleCommands() {
-  #ifdef USE_SERIAL
   if(Serial.available() > 0) {
     char v = (char)Serial.read();
    
     if(v == 'h') {
-      if(state == FORWARDING) {          //keep goin straight while decelerating
+      if(stateMachine->getState() == FORWARDING) { //keep goin straight while decelerating
         keep_position(seconds(1));
-      } else {                           //no need to counter rotate
+      } else {                                     //no need to counter rotate
         shutdown_motors();
       }
       Serial.println("h");
@@ -174,6 +151,13 @@ void handleCommands() {
        int p = between(0, 255, Serial.parseInt());
        Serial.print("Max power output: "); Serial.println(p);
        motors->maxPWMOutput(p);
+    } else if(v == 't') {
+      if(stateMachine->getState() == FORWARDING && forward_direction == AHEAD) {
+        forward_target_angle = Serial.parseInt();
+      } else {
+        forward(AHEAD, Serial.parseInt(), seconds(60));
+      }
+      Serial.println("t");
     }
     
     
@@ -196,12 +180,19 @@ void handleCommands() {
       lastMovementCmd = v;
     }
   }
-  #endif
+}
+void update_pid_from_serial(PID* pid) {
+  int p = Serial.parseInt();
+  int i = Serial.parseInt();
+  int d = Serial.parseInt();
+  pid->setParameters(p / 100.0f, i / 100.0f, d / 100.0f);
+  Serial.print("pid: ");
+  Serial.print(p); Serial.print(" ,"); Serial.print(i); Serial.print(" ,"); Serial.println(d);
 }
 
 /* ACTIONS */
 void forward(float direction, float target_angle, long duration) {
-  state = FORWARD;
+  stateMachine->transition(FORWARD);
   forward_direction = direction;
   forward_target_angle = target_angle;
   if(lastMovementCmd == 'a' || lastMovementCmd == 'd') {
@@ -210,7 +201,7 @@ void forward(float direction, float target_angle, long duration) {
   forwarding_time = duration;
 }
 void rotate(float direction, float target_angle, long duration, bool resetAngles) {
-  state = ROTATE;
+  stateMachine->transition(ROTATE);
   rotate_target_angle = direction * target_angle;
   rotating_time = duration;
   if(resetAngles) {
@@ -221,16 +212,5 @@ void keep_position(long duration) {
   rotate(LEFT, 0, duration, false);
 }
 void shutdown_motors() {
-  state = SHUTDOWN_MOTORS;
+  stateMachine->transition(SHUTDOWN_MOTORS);
 }
-
-#ifdef USE_SERIAL
-void update_pid_from_serial(PID* pid) {
-  int p = Serial.parseInt();
-  int i = Serial.parseInt();
-  int d = Serial.parseInt();
-  pid->setParameters(p / 100.0f, i / 100.0f, d / 100.0f);
-  Serial.print("pid: ");
-  Serial.print(p); Serial.print(" ,"); Serial.print(i); Serial.print(" ,"); Serial.println(d);
-}
-#endif
