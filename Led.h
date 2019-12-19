@@ -11,7 +11,7 @@ public:
   int getState();
   void pulse(float frequency);
   void update();
-protected:
+private:
   int state;
   int pin;
   long lastPulseTime;  

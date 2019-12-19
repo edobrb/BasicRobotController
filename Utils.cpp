@@ -22,3 +22,7 @@ int sign(int v) {
 int sign(long v) {
   return SIGN_EXPR(v);
 }
+
+int between(int mi, int ma, int v) {
+  return max(min(ma, v), mi);
+}

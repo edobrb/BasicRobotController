@@ -4,15 +4,12 @@
 #include "Utils.h"
 
 float computeArea(float v1, float v2, float dt) {
-  float area;
+  //Compute area as rectangle trapeze
   if (v1 <= 0 && v2 <= 0 || v1 >= 0 && v2 >= 0) {
-    area = sign(v1) * (max(abs(v1), abs(v2)) * dt - (abs(v2 - v1) * dt / 2));
+    return sign(v1) * (max(abs(v1), abs(v2)) * dt - (abs(v2 - v1) * dt / 2));
   }
-  if (v1 >= 0 && v2 <= 0 || v2 >= 0 && v1 <= 0) {
-    float x = -v1 * dt / (v2 - v1);
-    area = v1 * x / 2 + v2 * (dt - x) / 2;
-  }
-  return area;
+  float x = -v1 * dt / (v2 - v1);
+  return v1 * x / 2 + v2 * (dt - x) / 2;
 }
 
 

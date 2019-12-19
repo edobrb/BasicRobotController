@@ -10,5 +10,7 @@ int sign(float v);
 int sign(int v);
 int sign(long v);
 
+int between(int min, int max, int v);
+
 
 #endif
