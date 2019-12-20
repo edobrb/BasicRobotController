@@ -56,11 +56,11 @@ void setup(){
   mpu6050 = new MPU6050();
   mpu6050->autocalibration(true);
 
-  rotatePid = new PID(20, 100, 2, 1);
-  forwardPid = new PID(1, 0.1, 0.1, 2);
+  rotatePid = new PID(10, 50, 1.2f, 1);
+  forwardPid = new PID(50, 10, 3, 2);
 
   initializeStateMachine();
-  keep_position(seconds(600));
+  //keep_position(seconds(600));
   
   
   Serial.println("Ready!");
@@ -73,7 +73,7 @@ void loop() {
 }
 
 void initializeStateMachine() {
-  stateMachine = new StateMachine(DO_NOTHING);
+  stateMachine = new StateMachine(SHUTDOWN_MOTORS);
   
   stateMachine->setState(DO_NOTHING, []() -> void { });
   
@@ -92,7 +92,11 @@ void initializeStateMachine() {
   stateMachine->setState(FORWARDING, []() -> void {
     debugLed->pulse(10);
     if(!isExpired(forwarding_start, forwarding_time)) {
-      float error = (mpu6050->angleX - ((forward_target_angle / 360.0f) * fullRotationX)) / 360.0;
+      float ta = forward_target_angle;
+      float ca = mpu6050->angleX * 360.0f / fullRotationX;
+      float da = crop180Angle(ca - ta);
+      float error = absoluteMin(da, absoluteMin(da - 360.0f, da + 360.0f)) / 180.0f; //[-1,1]
+      //Serial.print("TA: "); Serial.print(ta); Serial.print(" CA: "); Serial.print(ca); Serial.print(" DA: "); Serial.print(da); Serial.print(" ERR: "); Serial.println(error);
       float attenuation = forwardPid->update(error);
       motors->leftPower(forward_direction - attenuation);
       motors->rightPower(forward_direction + attenuation);
@@ -109,8 +113,12 @@ void initializeStateMachine() {
   
   stateMachine->setState(ROTATING, []() -> void { debugLed->pulse(20);
     if(!isExpired(rotating_start, rotating_time)) {
-      float error = mpu6050->angleX - ((rotate_target_angle / 360.0f) * fullRotationX);
-      float power = rotatePid->update(error/fullRotationX);
+      float ta = rotate_target_angle;
+      float ca = mpu6050->angleX * 360.0f / fullRotationX;
+      float da = crop180Angle(ca - ta);
+      float error = absoluteMin(da, absoluteMin(da - 360.0f, da + 360.0f)) / 180.0f; //[-1,1]
+      //float error = mpu6050->angleX - ((rotate_target_angle / 360.0f) * fullRotationX);
+      float power = rotatePid->update(error);
       motors->leftPower(-power);
       motors->rightPower(power);
     } else {
@@ -194,7 +202,7 @@ void update_pid_from_serial(PID* pid) {
 void forward(float direction, float target_angle, long duration) {
   stateMachine->transition(FORWARD);
   forward_direction = direction;
-  forward_target_angle = target_angle;
+  forward_target_angle = crop180Angle(target_angle);
   if(lastMovementCmd == 'a' || lastMovementCmd == 'd') {
     mpu6050->resetAngles();
   }
@@ -202,7 +210,7 @@ void forward(float direction, float target_angle, long duration) {
 }
 void rotate(float direction, float target_angle, long duration, bool resetAngles) {
   stateMachine->transition(ROTATE);
-  rotate_target_angle = direction * target_angle;
+  rotate_target_angle = crop180Angle(direction * target_angle);
   rotating_time = duration;
   if(resetAngles) {
     mpu6050->resetAngles();

@@ -12,5 +12,8 @@ int sign(long v);
 
 int between(int min, int max, int v);
 
+float crop180Angle(float angle);
+
+float absoluteMin(float v1, float v2);
 
 #endif
